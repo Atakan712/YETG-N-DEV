@@ -10,9 +10,9 @@ CREATE OR REPLACE FUNCTION nw_is_product_active(p_product_id INT)
 RETURNS BOOLEAN
 LANGUAGE sql
 AS $$
-    SELECT discontinued = false
+    SELECT discontinued = 0
     FROM products
-    WHERE productid = p_product_id;
+    WHERE product_id = p_product_id;
 $$;
 
 -- Testler:
@@ -34,7 +34,7 @@ LANGUAGE sql
 AS $$
     SELECT COUNT(*) 
     FROM products
-    WHERE supplierid = p_supplier_id;
+    WHERE supplier_id = p_supplier_id;
 $$;
 
 -- Testler:
@@ -56,8 +56,8 @@ LANGUAGE sql
 AS $$
     SELECT COUNT(*) 
     FROM orders
-    WHERE customerid = p_customer_id
-      AND DATE_PART('year', orderdate) = p_year;
+    WHERE customer_id = p_customer_id
+      AND DATE_PART('year', order_date) = p_year;
 $$;
 
 -- Testler:
@@ -76,9 +76,9 @@ CREATE OR REPLACE FUNCTION nw_customer_last_order_date(p_customer_id TEXT)
 RETURNS DATE
 LANGUAGE sql
 AS $$
-    SELECT MAX(orderdate)
+    SELECT MAX(order_date)
     FROM orders
-    WHERE customerid = p_customer_id;
+    WHERE customer_id = p_customer_id;
 $$;
 
 -- Testler:
@@ -97,9 +97,9 @@ CREATE OR REPLACE FUNCTION nw_order_gross_value(p_order_id INT)
 RETURNS NUMERIC(12,2)
 LANGUAGE sql
 AS $$
-    SELECT COALESCE(SUM(unitprice * quantity * (1 - discount)), 0.00)
+    SELECT COALESCE(SUM(unit_price * quantity * (1 - discount)), 0.00)
     FROM order_details
-    WHERE orderid = p_order_id;
+    WHERE order_id = p_order_id;
 $$;
 
 -- Testler:
@@ -121,11 +121,11 @@ CREATE OR REPLACE FUNCTION nw_product_revenue(
 RETURNS NUMERIC(12,2)
 LANGUAGE sql
 AS $$
-    SELECT COALESCE(SUM(od.unitprice * od.quantity * (1 - od.discount)), 0.00)
+    SELECT COALESCE(SUM(od.unit_price * od.quantity * (1 - od.discount)), 0.00)
     FROM order_details od
-    JOIN orders o ON o.orderid = od.orderid
-    WHERE od.productid = p_product_id
-      AND o.orderdate BETWEEN p_start AND p_end;
+    JOIN orders o ON o.order_id = od.order_id
+    WHERE od.product_id = p_product_id
+      AND o.order_date BETWEEN p_start AND p_end;
 $$;
 
 -- Testler:
@@ -145,12 +145,12 @@ LANGUAGE sql
 AS $$
     SELECT 
         CASE 
-            WHEN (unitsinstock + COALESCE(unitsonorder,0)) < reorderlevel
-            THEN reorderlevel - (unitsinstock + COALESCE(unitsonorder,0))
+            WHEN (units_in_stock + COALESCE(units_on_order,0)) < reorder_level
+            THEN reorder_level - (units_in_stock + COALESCE(units_on_order,0))
             ELSE 0
         END
     FROM products
-    WHERE productid = p_product_id;
+    WHERE product_id = p_product_id;
 $$;
 
 -- Testler:
@@ -158,9 +158,17 @@ $$;
 -- SELECT nw_reorder_suggestion(9999); -- NULL
 
 
+
+
+
+
+
+
+
 AÇIKLAMA :
 8-9-10 NOLU SORULARI YAPMADIGIM İÇİN EKLEMEDİM ,
 AÇIKLAMA SATILARINI YAZARKEN CHATGPTDEN YARDIM ALDIM VE 7.SORU İÇİNDE YARDIM ALDIM
+
 
 
 
