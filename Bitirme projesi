@@ -1,0 +1,215 @@
+-- Bölümler tablosu
+CREATE TABLE bolumler (
+    bolum_id SERIAL PRIMARY KEY,
+    bolum_adi VARCHAR(100) NOT NULL
+);
+
+-- Öğretmenler tablosu
+CREATE TABLE ogretmenler (
+    ogretmen_id SERIAL PRIMARY KEY,
+    ad VARCHAR(50) NOT NULL,
+    soyad VARCHAR(50) NOT NULL,
+    bolum_id INT REFERENCES bolumler(bolum_id)
+);
+
+-- Dersler tablosu
+CREATE TABLE dersler (
+    ders_id SERIAL PRIMARY KEY,
+    ders_kodu VARCHAR(10) UNIQUE NOT NULL,
+    ders_adi VARCHAR(100) NOT NULL,
+    kredi INT NOT NULL CHECK (kredi > 0),
+    ogretmen_id INT REFERENCES ogretmenler(ogretmen_id)
+);
+
+-- Öğrenciler tablosu
+CREATE TABLE ogrenciler (
+    ogrenci_id SERIAL PRIMARY KEY,
+    ogrenci_no VARCHAR(20) UNIQUE NOT NULL,
+    ad VARCHAR(50) NOT NULL,
+    soyad VARCHAR(50) NOT NULL,
+    bolum_id INT REFERENCES bolumler(bolum_id)
+);
+
+-- Öğrenci-Ders kayıt tablosu
+CREATE TABLE ogrenci_dersleri (
+    kayit_id SERIAL PRIMARY KEY,
+    ogrenci_id INT REFERENCES ogrenciler(ogrenci_id),
+    ders_id INT REFERENCES dersler(ders_id),
+    vize_notu NUMERIC(5,2),
+    final_notu NUMERIC(5,2),
+    yil INT NOT NULL,
+    donem INT CHECK (donem IN (1,2)),
+    UNIQUE (ogrenci_id, ders_id, yil, donem)
+);
+
+
+
+INSERT INTO bolumler (bolum_adi) VALUES ('Bilgisayar Mühendisliği'), ('Matematik');
+
+INSERT INTO ogretmenler (ad, soyad, bolum_id)
+VALUES ('Ahmet', 'Yılmaz', 1), ('Ayşe', 'Kara', 2);
+
+INSERT INTO dersler (ders_kodu, ders_adi, kredi, ogretmen_id)
+VALUES ('CS101', 'Veritabanı Sistemleri', 4, 1),
+       ('MAT101', 'Lineer Cebir', 3, 2);
+
+INSERT INTO ogrenciler (ogrenci_no, ad, soyad, bolum_id)
+VALUES ('2023001', 'Ali', 'Demir', 1),
+       ('2023002', 'Zeynep', 'Koç', 2);
+
+INSERT INTO ogrenci_dersleri (ogrenci_id, ders_id, yil, donem)
+VALUES (1, 1, 2024, 1),
+       (2, 2, 2024, 1);
+
+
+
+
+CREATE OR REPLACE FUNCTION fn_harf_notu_hesapla(vize NUMERIC, final NUMERIC)
+RETURNS VARCHAR AS $$
+DECLARE
+    ort NUMERIC;
+BEGIN
+    ort := vize * 0.4 + final * 0.6;
+
+    IF ort >= 90 THEN
+        RETURN 'AA';
+    ELSIF ort >= 85 THEN
+        RETURN 'BA';
+    ELSIF ort >= 75 THEN
+        RETURN 'BB';
+    ELSIF ort >= 65 THEN
+        RETURN 'CB';
+    ELSIF ort >= 55 THEN
+        RETURN 'CC';
+    ELSE
+        RETURN 'FF';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+CREATE OR REPLACE FUNCTION fn_ders_gecme_durumu(vize NUMERIC, final NUMERIC)
+RETURNS TEXT AS $$
+DECLARE
+    ort NUMERIC;
+BEGIN
+    ort := vize * 0.4 + final * 0.6;
+    IF ort >= 50 AND final >= 45 THEN
+        RETURN 'Geçti';
+    ELSE
+        RETURN 'Kaldı';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE PROCEDURE sp_ogrenci_derse_kayit(p_ogrenci_id INT, p_ders_id INT, p_yil INT, p_donem INT)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM ogrenci_dersleri 
+        WHERE ogrenci_id = p_ogrenci_id AND ders_id = p_ders_id
+    ) THEN
+        RAISE EXCEPTION 'Öğrenci bu dersi zaten almış.';
+    END IF;
+
+    INSERT INTO ogrenci_dersleri (ogrenci_id, ders_id, yil, donem)
+    VALUES (p_ogrenci_id, p_ders_id, p_yil, p_donem);
+END;
+$$;
+
+
+
+CREATE OR REPLACE PROCEDURE sp_not_girisi(p_kayit_id INT, p_vize NUMERIC, p_final NUMERIC)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF p_vize < 0 OR p_vize > 100 OR p_final < 0 OR p_final > 100 THEN
+        RAISE EXCEPTION 'Notlar 0-100 arasında olmalıdır.';
+    END IF;
+
+    UPDATE ogrenci_dersleri
+    SET vize_notu = p_vize, final_notu = p_final
+    WHERE kayit_id = p_kayit_id;
+END;
+$$;
+
+
+CREATE OR REPLACE VIEW view_transkript AS
+SELECT 
+    o.ogrenci_no,
+    CONCAT(o.ad, ' ', o.soyad) AS ogrenci_ad_soyad,
+    d.ders_kodu,
+    d.ders_adi,
+    d.kredi,
+    od.vize_notu,
+    od.final_notu,
+    fn_harf_notu_hesapla(od.vize_notu, od.final_notu) AS harf_notu,
+    fn_ders_gecme_durumu(od.vize_notu, od.final_notu) AS durum,
+    od.yil,
+    od.donem
+FROM ogrenciler o
+JOIN ogrenci_dersleri od ON o.ogrenci_id = od.ogrenci_id
+JOIN dersler d ON d.ders_id = od.ders_id;
+
+
+CREATE OR REPLACE VIEW view_bolum_ders_listesi AS
+SELECT 
+    b.bolum_adi,
+    d.ders_kodu,
+    d.ders_adi,
+    d.kredi,
+    CONCAT(o.ad, ' ', o.soyad) AS ogretmen_ad_soyad
+FROM bolumler b
+JOIN ogretmenler o ON b.bolum_id = o.bolum_id
+JOIN dersler d ON o.ogretmen_id = d.ogretmen_id;
+
+-- Belirli bir bölümdeki öğrencileri listele
+SELECT * FROM ogrenciler WHERE bolum_id = 1;
+
+-- Her bölümdeki toplam öğrenci sayısı
+SELECT b.bolum_adi, COUNT(o.ogrenci_id) AS ogrenci_sayisi
+FROM bolumler b
+LEFT JOIN ogrenciler o ON b.bolum_id = o.bolum_id
+GROUP BY b.bolum_adi;
+
+-- Her dersin not ortalaması
+SELECT d.ders_adi,
+       AVG(od.vize_notu * 0.4 + od.final_notu * 0.6) AS ortalama
+FROM dersler d
+JOIN ogrenci_dersleri od ON d.ders_id = od.ders_id
+GROUP BY d.ders_adi;
+
+-- Fonksiyon Testi
+SELECT fn_harf_notu_hesapla(70, 80);
+SELECT fn_ders_gecme_durumu(40, 60);
+
+-- Prosedür Testi
+CALL sp_ogrenci_derse_kayit(1, 2, 2024, 2);
+CALL sp_not_girisi(1, 80, 90);
+
+-- View Testi
+SELECT * FROM view_transkript WHERE ogrenci_no = '2023001';
+SELECT * FROM view_bolum_ders_listesi;
+
+
+
+# Okul Bilgi Sistemi (OBS) Çekirdeği
+
+## Tasarım Özeti
+Bu proje, bir eğitim kurumunun temel akademik verilerini PostgreSQL üzerinde yönetmek için tasarlanmıştır. 
+Veri modeli 3. normal form düzeyine getirilmiştir. Her tablo yalnızca bir varlığı temsil eder, tekrar eden bilgiler dış anahtarlar ile bağlanmıştır.
+
+## Fonksiyonel Özellikler
+- Öğrenci, öğretmen, bölüm ve ders yönetimi.
+- Öğrencilerin ders kayıtları, not girişleri.
+- Harf notu ve geçme durumu hesaplamaları.
+- Transkript ve bölüm ders listesi görünümü.
+
+## Kullanılan PostgreSQL Özellikleri
+- FOREIGN KEY ilişkileri
+- CHECK ve UNIQUE kısıtları
+- PL/pgSQL fonksiyon ve prosedürleri
+- VIEW tanımları
